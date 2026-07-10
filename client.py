@@ -1,62 +1,35 @@
 import socket
 import json
-import os
 import pandas as pd
 import joblib
-import requests
+import os
+from dotenv import load_dotenv
+import requests 
+
+# بارگذاری متغیرهای محیطی از فایل .env
+load_dotenv()
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 HOST = 'localhost'
 PORT = 9999
 
-model = joblib.load("anomaly_model.joblib")
-
-FEATURE_COLUMNS = ['src_port', 'dst_port', 'packet_size', 'duration_ms', 'protocol_UDP']
-
+try:
+    model = joblib.load("anomaly_model.joblib")
+    print("Defender model loaded successfully.")
+except FileNotFoundError:
+    print("Warning: 'anomaly_model.joblib' not found. Please run the training script first.")
+    model = None
 
 def pre_process_data(data):
     df = pd.DataFrame([data])
-    df = pd.get_dummies(df, columns=['protocol'], drop_first=True)
-    if 'protocol_UDP' not in df.columns:
-        df['protocol_UDP'] = 0
-    return df[FEATURE_COLUMNS]
-
-
-def alert_with_llm(data):
-    api_key = os.environ.get("OPENROUTER_API_KEY", "")
-    if not api_key:
-        print("\nAnomaly Detected!\nLabel: Anomaly\nReason: OPENROUTER_API_KEY not set\n")
-        return
-
-    response = requests.post(
-        url="https://openrouter.ai/api/v1/chat/completions",
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        json={
-            "model": "openai/gpt-oss-120b:free",
-            "messages": [
-                {
-                    "role": "system",
-                    "content": "You are a helpful assistant that labels sensor anomalies"
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        f"Sensor reading: {data} "
-                        "Describe the type of anomaly and suggest a possible cause"
-                    )
-                }
-            ],
-            "reasoning": {"enabled": True}
-        },
-        timeout=30,
-    )
-    response.raise_for_status()
-    message = response.json()['choices'][0]['message']
-    content = message.get('content', str(message))
-    print(f"\nAnomaly Detected!\nLabel: Anomaly\nReason: {content}\n")
-
+    df_processed = pd.get_dummies(df, columns=['protocol'], drop_first=True)
+    expected_cols = ['src_port', 'dst_port', 'packet_size', 'duration_ms', 'protocol_UDP']
+    for col in expected_cols:
+        if col not in df_processed.columns:
+            df_processed[col] = 0
+            
+    df_processed = df_processed[expected_cols]
+    return df_processed
 
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     s.connect((HOST, PORT))
@@ -73,16 +46,66 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             line, buffer = buffer.split('\n', 1)
             try:
                 data = json.loads(line)
-                print(f'Data Received:\n{data}\n')
+                print(f'Data Received: {data}')
 
-                processed = pre_process_data(data)
-                prediction = model.predict(processed)[0]
-
-                if prediction == -1:
-                    print("Classification: ANOMALY")
-                    alert_with_llm(data)
+                if model is not None:
+                    processed_df = pre_process_data(data)
+                    prediction = model.predict(processed_df)[0] 
+                    
+                    # شرط انحصاری: درخواست فقط در صورت تشخیص آنومالی (-1) ارسال می‌شود
+                    if prediction == -1:
+                        print("--> Status: [!] ANOMALY DETECTED")
+                        
+                        if not GROQ_API_KEY:
+                            print("[Error] GROQ_API_KEY not found in .env file.")
+                        else:
+                            # آدرس سرور ارائه‌شده
+                            url = "https://api.groq.com/openai/v1/chat/completions"
+                            headers = {
+                                "Authorization": f"Bearer {GROQ_API_KEY}",
+                                "Content-Type": "application/json",
+                            }
+                            
+                            # تنظیم مدل روی شناسه درخواستی شما
+                            payload = {
+                                "model": "openai/gpt-oss-120b",
+                                "messages": [
+                                    {
+                                        "role": "system",
+                                        "content": "You are a network security assistant. Analyze the anomalous network event and supply a concise cause assessment."
+                                    },
+                                    {
+                                        "role": "user",
+                                        "content": f"The following reading was flagged as anomalous: {json.dumps(data)}. Explain potential issues."
+                                    }
+                                ]
+                            }
+                            
+                            try:
+                                response = requests.post(
+                                    url=url,
+                                    headers=headers,
+                                    data=json.dumps(payload),
+                                    timeout=10
+                                )
+                                
+                                if response.status_code == 200:
+                                    res_json = response.json()
+                                    reason = res_json['choices'][0]['message']['content'].strip()
+                                    
+                                    print(f"\n--- Anomaly Alert (Groq Analysis) ---")
+                                    print(f"Reason: {reason}\n")
+                                else:
+                                    print(f"Could not fetch LLM explanation (HTTP {response.status_code}).")
+                                    print(f"Details: {response.text}")
+                            except Exception as e:
+                                print(f"Error querying Groq API: {e}")
+                        
+                    else:
+                        # عدم ارسال درخواست در ترافیک‌های نرمال
+                        print("Status: Normal\n")
                 else:
-                    print("Classification: NORMAL\n")
+                    print("Model file is missing. Skipping classification.")
 
             except json.JSONDecodeError:
                 print("Error decoding JSON.")
