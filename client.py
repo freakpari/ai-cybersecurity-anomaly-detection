@@ -6,7 +6,6 @@ import os
 from dotenv import load_dotenv
 import requests 
 
-# بارگذاری متغیرهای محیطی از فایل .env
 load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
@@ -52,21 +51,18 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                     processed_df = pre_process_data(data)
                     prediction = model.predict(processed_df)[0] 
                     
-                    # شرط انحصاری: درخواست فقط در صورت تشخیص آنومالی (-1) ارسال می‌شود
                     if prediction == -1:
                         print("--> Status: [!] ANOMALY DETECTED")
                         
                         if not GROQ_API_KEY:
                             print("[Error] GROQ_API_KEY not found in .env file.")
                         else:
-                            # آدرس سرور ارائه‌شده
                             url = "https://api.groq.com/openai/v1/chat/completions"
                             headers = {
                                 "Authorization": f"Bearer {GROQ_API_KEY}",
                                 "Content-Type": "application/json",
                             }
                             
-                            # تنظیم مدل روی شناسه درخواستی شما
                             payload = {
                                 "model": "openai/gpt-oss-120b",
                                 "messages": [
@@ -102,7 +98,6 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                                 print(f"Error querying Groq API: {e}")
                         
                     else:
-                        # عدم ارسال درخواست در ترافیک‌های نرمال
                         print("Status: Normal\n")
                 else:
                     print("Model file is missing. Skipping classification.")
