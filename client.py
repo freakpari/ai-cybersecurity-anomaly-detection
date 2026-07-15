@@ -52,7 +52,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                     prediction = model.predict(processed_df)[0] 
                     
                     if prediction == -1:
-                        print("--> Status: [!] ANOMALY DETECTED")
+                        print("--> Status: ANOMALY DETECTED")
                         
                         if not GROQ_API_KEY:
                             print("[Error] GROQ_API_KEY not found in .env file.")
