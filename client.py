@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 import requests 
 
 load_dotenv()
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 HOST = 'localhost'
 PORT = 9999
@@ -54,17 +54,20 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                     if prediction == -1:
                         print("--> Status: ANOMALY DETECTED")
                         
-                        if not GROQ_API_KEY:
-                            print("[Error] GROQ_API_KEY not found in .env file.")
+                        if not OPENROUTER_API_KEY:
+                            print("[Error] OPENROUTER_API_KEY not found in .env file.")
                         else:
-                            url = "https://api.groq.com/openai/v1/chat/completions"
+                            # OpenRouter API endpoint
+                            url = "https://openrouter.ai/api/v1/chat/completions"
                             headers = {
-                                "Authorization": f"Bearer {GROQ_API_KEY}",
+                                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
                                 "Content-Type": "application/json",
+                                "HTTP-Referer": "http://localhost:9999",  # Optional but recommended
+                                "X-Title": "Network Anomaly Detection"  # Optional
                             }
                             
                             payload = {
-                                "model": "openai/gpt-oss-120b",
+                                "model": "openai/gpt-3.5-turbo",  # OpenRouter model name
                                 "messages": [
                                     {
                                         "role": "system",
@@ -89,13 +92,13 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                                     res_json = response.json()
                                     reason = res_json['choices'][0]['message']['content'].strip()
                                     
-                                    print(f"\n--- Anomaly Alert (Groq Analysis) ---")
+                                    print(f"\n--- Anomaly Alert (OpenRouter Analysis) ---")
                                     print(f"Reason: {reason}\n")
                                 else:
                                     print(f"Could not fetch LLM explanation (HTTP {response.status_code}).")
                                     print(f"Details: {response.text}")
                             except Exception as e:
-                                print(f"Error querying Groq API: {e}")
+                                print(f"Error querying OpenRouter API: {e}")
                         
                     else:
                         print("Status: Normal\n")
