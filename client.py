@@ -68,11 +68,11 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                                 "messages": [
                                     {
                                         "role": "system",
-                                        "content": "You are a network security assistant. Analyze the anomalous network event and supply a concise cause assessment."
+                                        "content": "You are a network security expert. Respond with ONLY 1-2 sentences identifying the core issue."
                                     },
                                     {
                                         "role": "user",
-                                        "content": f"The following reading was flagged as anomalous: {json.dumps(data)}. Explain potential issues."
+                                        "content": f"Briefly explain why this network flow is suspicious: {json.dumps(data)}"
                                     }
                                 ]
                             }
